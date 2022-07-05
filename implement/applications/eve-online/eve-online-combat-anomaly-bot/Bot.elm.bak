@@ -50,7 +50,7 @@ import BotLab.BotInterface_To_Host_20210823 as InterfaceToHost
 import Common.AppSettings as AppSettings
 import Common.Basics exposing (listElementAtWrappedIndex, stringContainsIgnoringCase)
 import Common.DecisionPath exposing (describeBranch)
-import Common.EffectOnWindow as EffectOnWindow exposing (MouseButton(..), VirtualKeyCode(..), vkey_W)
+import Common.EffectOnWindow as EffectOnWindow exposing (MouseButton(..))
 import Dict
 import EveOnline.BotFramework
     exposing
@@ -82,8 +82,13 @@ import EveOnline.BotFrameworkSeparatingMemory
         , useContextMenuCascadeOnOverviewEntry
         , waitForProgressInGame
         )
-import EveOnline.ParseUserInterface exposing (OverviewWindowEntry, ShipUI, ShipUIModuleButton, getAllContainedDisplayTexts, parseKeyShortcutText, DirectionalScannerWindow)
-import EveOnline.VolatileProcessInterface exposing (EffectSequenceElement(..))
+import EveOnline.ParseUserInterface
+    exposing
+        ( OverviewWindowEntry
+        , ShipUI
+        , ShipUIModuleButton
+        , getAllContainedDisplayTexts
+        )
 import Set
 
 
@@ -135,11 +140,11 @@ goodStandingPatterns =
 
 
 type alias BotSettings =
-    { hideWhenNeutralInLocal : AppSettings.YesOrNo {- Hides when neutral in local-}
-    , anomalyNames : List String {- Names of anomaly-}
-    , ratsToAvoid : List String {- NPCs to avoid -}
-    , modulesToActivateAlways : List String {- Module to activate -}
-    , maxTargetCount : Int  {- Max number of target-}
+    { hideWhenNeutralInLocal : AppSettings.YesOrNo
+    , anomalyNames : List String
+    , ratsToAvoid : List String
+    , modulesToActivateAlways : List String
+    , maxTargetCount : Int
     , botStepDelayMilliseconds : Int
     }
 
@@ -213,7 +218,7 @@ findReasonToIgnoreProbeScanResult context probeScanResult =
                                     (\anomalyName ->
                                         probeScanResult.cellsTexts
                                             |> Dict.get "Name"
-                                            |> Maybe.map (String.toLower >> (String.contains) (anomalyName |> String.toLower |> String.trim))
+                                            |> Maybe.map (String.toLower >> (==) (anomalyName |> String.toLower |> String.trim))
                                             |> Maybe.withDefault False
                                     )
                            )
@@ -561,7 +566,7 @@ combat context seeUndockingComplete continueIfCombatComplete =
                                         describeBranch "I see an overview entry to lock."
                                             (lockTargetFromOverviewEntry
                                                 nextOverviewEntryToLock
-                                                --context
+                                                context
                                             )
                                 )
 
@@ -585,7 +590,7 @@ combat context seeUndockingComplete continueIfCombatComplete =
                                                                     describeBranch "Lock more targets."
                                                                         (lockTargetFromOverviewEntry
                                                                             nextOverviewEntryToLock
-                                                                            --context
+                                                                            context
                                                                         )
                                                         )
                                                     )
@@ -635,7 +640,7 @@ enterAnomaly { ifNoAcceptableAnomalyAvailable } context =
                         (useContextMenuCascade
                             ( "Scan result", anomalyScanResult.uiNode )
                             (useMenuEntryWithTextContaining "Warp to Within"
-                                (useMenuEntryWithTextContaining "Within 50 km" menuCascadeCompleted)
+                                (useMenuEntryWithTextContaining "Within 0 m" menuCascadeCompleted)
                             )
                             context
                         )
@@ -733,19 +738,15 @@ returnDronesToBay context =
             )
 
 
-lockTargetFromOverviewEntry : OverviewWindowEntry -> DecisionPathNode
-{--
-Grabs target from the overview entry and then sends it down to the decision path.
--}
-lockTargetFromOverviewEntry overviewWindowEntry =
-        describeBranch "locking target..." (
-        decideActionForCurrentStep (
-        [ [EffectOnWindow.KeyDown EffectOnWindow.vkey_LCONTROL]
-        , overviewWindowEntry.uiNode |> clickOnUIElement MouseButtonLeft
-        ,[EffectOnWindow.KeyUp  EffectOnWindow.vkey_LCONTROL]
-        ] |> List.concat -- Needed for changing list from List (List A) to List A.
+lockTargetFromOverviewEntry : OverviewWindowEntry -> BotDecisionContext -> DecisionPathNode
+lockTargetFromOverviewEntry overviewEntry context =
+    describeBranch ("Lock target from overview entry '" ++ (overviewEntry.objectName |> Maybe.withDefault "") ++ "'")
+        (useContextMenuCascadeOnOverviewEntry
+            (useMenuEntryWithTextEqual "Lock target" menuCascadeCompleted)
+            overviewEntry
+            context
         )
-        )
+
 
 readShipUIModuleButtonTooltips : BotDecisionContext -> Maybe DecisionPathNode
 readShipUIModuleButtonTooltips =
@@ -1005,10 +1006,6 @@ scanResultLooksLikeItIsOnGrid =
     .cellsTexts
         >> Dict.get "Distance"
         >> Maybe.map (\text -> (text |> String.contains " m") || (text |> String.contains " km"))
-
-getShipsFromDScanner: EveOnline.ParseUserInterface.DirectionalScannerWindow -> List EveOnline.ParseUserInterface.DirectionalScannerWindow
-
-
 
 
 getNamesOfOtherPilotsInOverview : ReadingFromGameClient -> List String
